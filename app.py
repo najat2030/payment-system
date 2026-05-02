@@ -11,131 +11,37 @@ from reportlab.lib.styles import getSampleStyleSheet
 
 # ================== إعدادات الصفحة والثيم ==================
 st.set_page_config(
-    page_title="تحديث فواتير اتصالات",
+    page_title="تحديث مدفوعات اتصالات",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 # ألوان احترافية: أزرق داكن ملكي + أبيض
-PRIMARY_COLOR = "#1a237e"  # أزرق داكن ملكي
-SECONDARY_COLOR = "#ffffff" # خلفية بيضاء
+PRIMARY_COLOR = "#1a237e"
+SECONDARY_COLOR = "#ffffff"
 TEXT_COLOR = "#333333"
-RED_COLOR = "#d32f2f"      # أحمر غامق للـ Overpayment
-GREEN_COLOR = "#388e3c"    # أخضر للمدفوعات الطبيعية
+RED_COLOR = "#d32f2f"
+GREEN_COLOR = "#388e3c"
 
-# تطبيق CSS مخصص مع خط عربي جميل (Tajawal)
 st.markdown(f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap');
     
-    .main {{
-        background-color: {SECONDARY_COLOR};
-        font-family: 'Tajawal', sans-serif;
-    }}
-    
-    [data-testid="stSidebar"] {{
-        background-color: {PRIMARY_COLOR};
-        font-family: 'Tajawal', sans-serif;
-    }}
-    
-    [data-testid="stSidebar"] .stMarkdown h1, 
-    [data-testid="stSidebar"] .stMarkdown h2,
-    [data-testid="stSidebar"] .stMarkdown p,
-    [data-testid="stSidebar"] label {{
-        color: white !important;
-        font-family: 'Tajawal', sans-serif;
-    }}
-    
-    [data-testid="stSidebar"] .stButton > button {{
-        background-color: rgba(255, 255, 255, 0.1);
-        color: white;
-        border: none;
-        width: 100%;
-        text-align: right;
-        padding: 12px;
-        margin-bottom: 8px;
-        border-radius: 8px;
-        font-family: 'Tajawal', sans-serif;
-        font-weight: 500;
-    }}
-    
-    [data-testid="stSidebar"] .stButton > button:hover {{
-        background-color: rgba(255, 255, 255, 0.2);
-    }}
-
-    div[data-testid="stMetric"] {{
-        background-color: white;
-        padding: 25px;
-        border-radius: 12px;
-        box-shadow: 0 6px 12px rgba(0,0,0,0.08);
-        text-align: center;
-        border-top: 4px solid {PRIMARY_COLOR};
-        font-family: 'Tajawal', sans-serif;
-    }}
-    
-    div[data-testid="stMetric"] p {{
-        font-size: 18px;
-        color: {TEXT_COLOR};
-        font-weight: 500;
-    }}
-    
-    div[data-testid="stMetric"] div[data-testid="stMetricValue"] {{
-        font-size: 28px;
-        font-weight: bold;
-        color: {PRIMARY_COLOR};
-        margin-top: 8px;
-    }}
-
-    .dashboard-header {{
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        background: linear-gradient(135deg, {PRIMARY_COLOR} 0%, #283593 100%);
-        color: white;
-        padding: 25px 35px;
-        border-radius: 15px;
-        margin-bottom: 25px;
-        box-shadow: 0 8px 16px rgba(0,0,0,0.1);
-        font-family: 'Tajawal', sans-serif;
-    }}
-    
-    .dashboard-header h1 {{
-        margin: 0;
-        font-size: 32px;
-        font-weight: 700;
-        letter-spacing: 0.5px;
-    }}
-    
-    .dashboard-header .date-info {{
-        font-size: 16px;
-        opacity: 0.95;
-        text-align: left;
-        line-height: 1.4;
-    }}
-
-    .stDataFrame {{
-        border-radius: 12px;
-        overflow: hidden;
-        box-shadow: 0 6px 12px rgba(0,0,0,0.05);
-        font-family: 'Tajawal', sans-serif;
-    }}
-    
-    .stButton > button {{
-        background-color: {PRIMARY_COLOR};
-        color: white;
-        border-radius: 8px;
-        padding: 12px 24px;
-        font-weight: 600;
-        font-family: 'Tajawal', sans-serif;
-        transition: all 0.3s ease;
-    }}
-    
-    .stButton > button:hover {{
-        background-color: #0d1642;
-        transform: translateY(-2px);
-        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-    }}
+    .main {{ background-color: {SECONDARY_COLOR}; font-family: 'Tajawal', sans-serif; }}
+    [data-testid="stSidebar"] {{ background-color: {PRIMARY_COLOR}; font-family: 'Tajawal', sans-serif; }}
+    [data-testid="stSidebar"] .stMarkdown h1, [data-testid="stSidebar"] .stMarkdown h2, [data-testid="stSidebar"] .stMarkdown p, [data-testid="stSidebar"] label {{ color: white !important; font-family: 'Tajawal', sans-serif; }}
+    [data-testid="stSidebar"] .stButton > button {{ background-color: rgba(255, 255, 255, 0.1); color: white; border: none; width: 100%; text-align: right; padding: 12px; margin-bottom: 8px; border-radius: 8px; font-family: 'Tajawal', sans-serif; font-weight: 500; }}
+    [data-testid="stSidebar"] .stButton > button:hover {{ background-color: rgba(255, 255, 255, 0.2); }}
+    div[data-testid="stMetric"] {{ background-color: white; padding: 25px; border-radius: 12px; box-shadow: 0 6px 12px rgba(0,0,0,0.08); text-align: center; border-top: 4px solid {PRIMARY_COLOR}; font-family: 'Tajawal', sans-serif; }}
+    div[data-testid="stMetric"] p {{ font-size: 18px; color: {TEXT_COLOR}; font-weight: 500; }}
+    div[data-testid="stMetric"] div[data-testid="stMetricValue"] {{ font-size: 28px; font-weight: bold; color: {PRIMARY_COLOR}; margin-top: 8px; }}
+    .dashboard-header {{ display: flex; justify-content: space-between; align-items: center; background: linear-gradient(135deg, {PRIMARY_COLOR} 0%, #283593 100%); color: white; padding: 25px 35px; border-radius: 15px; margin-bottom: 25px; box-shadow: 0 8px 16px rgba(0,0,0,0.1); font-family: 'Tajawal', sans-serif; }}
+    .dashboard-header h1 {{ margin: 0; font-size: 32px; font-weight: 700; letter-spacing: 0.5px; }}
+    .dashboard-header .date-info {{ font-size: 16px; opacity: 0.95; text-align: left; line-height: 1.4; }}
+    .stDataFrame {{ border-radius: 12px; overflow: hidden; box-shadow: 0 6px 12px rgba(0,0,0,0.05); font-family: 'Tajawal', sans-serif; }}
+    .stButton > button {{ background-color: {PRIMARY_COLOR}; color: white; border-radius: 8px; padding: 12px 24px; font-weight: 600; font-family: 'Tajawal', sans-serif; transition: all 0.3s ease; }}
+    .stButton > button:hover {{ background-color: #0d1642; transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -156,7 +62,11 @@ def load_data():
             
             # إذا لم يكن عمود system موجوداً، ننشئه بقيم فارغة أو نسخ من Previous
             if "system" not in df.columns:
-                df["system"] = df["Previous"].copy()  # أو يمكن جعله 0
+                df["system"] = df["Previous"].copy()
+            
+            # إنشاء عمود لتخزين النظام السابق (للمرة القادمة)
+            if "previous_system" not in df.columns:
+                df["previous_system"] = df["system"].copy()  # أول مرة، النظام السابق = النظام الحالي
             
             return df
         except Exception as e:
@@ -165,6 +75,18 @@ def load_data():
     else:
         st.warning("⚠️ لم يتم العثور على ملف 'database.xlsx'. يرجى رفعه إلى المستودع.")
         return pd.DataFrame()
+
+def save_updated_data(df):
+    """حفظ البيانات المحدثة في ملف Excel"""
+    try:
+        # حفظ العمود system كـ previous_system للمرة القادمة
+        df["previous_system"] = df["system"].copy()
+        
+        # حفظ الملف
+        df.to_excel(DB_FILE, index=False)
+        st.success("✅ تم حفظ القيم الجديدة في ملف database.xlsx بنجاح!")
+    except Exception as e:
+        st.error(f"❌ خطأ في حفظ الملف: {e}")
 
 def format_currency(value):
     """تنسيق الأرقام كعملة"""
@@ -193,7 +115,7 @@ if menu == "لوحة التحكم":
         st.markdown(f"""
         <div class="dashboard-header">
             <div>
-                <h1>إجمالي فواتير - April 2026</h1>
+                <h1>تحديث مدفوعات اتصالات - April 2026</h1>
                 <p style="font-size: 18px; margin-top: 8px; opacity: 0.9;">حساب منطقة البحر الأحمر للتأمين الصحي - 6.133531</p>
             </div>
             <div class="date-info">
@@ -209,14 +131,13 @@ if menu == "لوحة التحكم":
         st.info("""
         💡 **طريقة الاستخدام:**  
         افتحي تطبيق OPay → ادخلي رقم الموبايل → انسخي المبلغ المستحق على النظام → الصقيه في الجدول أدناه في عمود "المبلغ على النظام (System)".
+        
+        ⚠️ **ملاحظة:** سيتم حفظ القيم الجديدة تلقائياً في ملف Excel لاستخدامها في التحديث القادم.
         """)
 
         # إنشاء نسخة قابلة للتعديل من البيانات لإدخال قيم system
-        editable_df = df[["Account No.", "Spoc", "Mobile", "Previous", "system", "Type"]].copy()
+        editable_df = df[["Account No.", "Spoc", "Mobile", "Previous", "previous_system", "system", "Type"]].copy()
         
-        # إخفاء صفوف NonPayment من التعديل (اختياري)
-        # editable_df = editable_df[editable_df["Type"] != "NonPayment"]
-
         # استخدام data_editor للسماح بالتعديل المباشر لعمود system
         edited_df = st.data_editor(
             editable_df,
@@ -224,15 +145,20 @@ if menu == "لوحة التحكم":
             hide_index=True,
             column_config={
                 "system": st.column_config.NumberColumn(
-                    "المبلغ على النظام (System)",
+                    "المبلغ على النظام (System) - الجديد",
                     help="أدخلي المبلغ المستحق على النظام من تطبيق OPay",
-                    min_value=None,  # السماح بالقيم السالبة أيضاً
+                    min_value=None,
                     step=0.01,
                     format="%.2f"
                 ),
+                "previous_system": st.column_config.NumberColumn(
+                    "المبلغ على النظام (System) - السابق",
+                    disabled=True,  # منع التعديل اليدوي للنظام السابق
+                    help="القيمة المخزنة من آخر تحديث"
+                ),
                 "Previous": st.column_config.NumberColumn(
                     "الرصيد السابق",
-                    disabled=True  # منع تعديل الرصيد السابق
+                    disabled=True
                 ),
                 "Account No.": st.column_config.TextColumn(
                     "رقم الحساب",
@@ -255,16 +181,32 @@ if menu == "لوحة التحكم":
 
         # زر لتحديث النظام وحساب المدفوعات
         if st.button("🚀 تحديث النظام وحساب المدفوعات"):
+            # التأكد من وجود عمود system في edited_df
+            if "system" not in edited_df.columns:
+                st.error("❌ عمود 'system' غير موجود في جدول التعديل. يرجى التحقق من ملف البيانات.")
+                st.stop()
+
             # دمج البيانات المعدلة مع الأصلية
             updated_df = df.merge(edited_df[["Account No.", "system"]], on="Account No.", how="left")
             
-            # إذا لم يتم تعديل بعض الصفوف، نحتفظ بالقيمة القديمة
-            updated_df["system"] = updated_df["system"].fillna(df["system"])
+            # إذا لم يتم تعديل بعض الصفوف، نحتفظ بالقيمة القديمة من df الأصلي
+            if "system" in df.columns:
+                updated_df["system"] = updated_df["system"].fillna(df["system"])
+            else:
+                # إذا لم يكن system موجوداً في df الأصلي، نستخدم القيمة من edited_df أو 0
+                updated_df["system"] = updated_df["system"].fillna(0)
+
+            # التأكد من وجود previous_system
+            if "previous_system" not in updated_df.columns:
+                if "system" in df.columns:
+                    updated_df["previous_system"] = df["system"].copy()
+                else:
+                    updated_df["previous_system"] = updated_df["system"].copy()
 
             # ================== الحسابات التلقائية ==================
-            # المدفوع منذ آخر تحديث = Previous - system
+            # المدفوع منذ آخر تحديث = previous_system - system (الحالي)
             updated_df["Paid_Since_Last_Update"] = updated_df.apply(
-                lambda row: 0 if row["Type"] == "NonPayment" else row["Previous"] - row["system"], axis=1
+                lambda row: 0 if row["Type"] == "NonPayment" else row["previous_system"] - row["system"], axis=1
             )
 
             # Overpayment (إذا كان الناتج سالباً)
@@ -272,10 +214,10 @@ if menu == "لوحة التحكم":
 
             # Collection (المبلغ المحصل فعلياً)
             updated_df["Collection"] = updated_df.apply(
-                lambda row: 0 if row["Type"] == "NonPayment" else max(0, min(updated_df.loc[row.name, "Paid_Since_Last_Update"], row["Previous"])) , axis=1
+                lambda row: 0 if row["Type"] == "NonPayment" else max(0, min(updated_df.loc[row.name, "Paid_Since_Last_Update"], row["previous_system"])) , axis=1
             )
 
-            # متبقي للدفع = الفاتورة - system
+            # متبقي للدفع = الفاتورة - system (الحالي)
             updated_df["Remaining_Due"] = updated_df["Invoice_April_2026"] - updated_df["system"]
 
             # ================== عرض المقاييس (Metrics) ==================
@@ -304,7 +246,7 @@ if menu == "لوحة التحكم":
             report_df = updated_df.copy()
 
             # تنسيق الأرقام لتظهر بشكل جميل
-            numeric_cols = ['Previous', 'system', 'Paid_Since_Last_Update', 'Collection', 'Overpayment', 'Remaining_Due']
+            numeric_cols = ['Previous', 'previous_system', 'system', 'Paid_Since_Last_Update', 'Collection', 'Overpayment', 'Remaining_Due']
             for col in numeric_cols:
                 report_df[col] = report_df[col].apply(format_currency)
 
@@ -314,6 +256,7 @@ if menu == "لوحة التحكم":
                 "Spoc", 
                 "Mobile", 
                 "Previous", 
+                "previous_system", 
                 "system", 
                 "Paid_Since_Last_Update", 
                 "Overpayment", 
@@ -327,7 +270,8 @@ if menu == "لوحة التحكم":
                 "Spoc": "اسم العميل/الجهة",
                 "Mobile": "رقم الهاتف",
                 "Previous": "الرصيد السابق",
-                "system": "المبلغ على النظام (System)",
+                "previous_system": "النظام السابق (مخزن)",
+                "system": "النظام الحالي (جديد)",
                 "Paid_Since_Last_Update": "المدفوع منذ آخر تحديث",
                 "Overpayment": "الدفع الزائد (Overpayment)",
                 "Remaining_Due": "متبقي للدفع",
@@ -367,13 +311,19 @@ if menu == "لوحة التحكم":
                 "اسم العميل/الجهة": "",
                 "رقم الهاتف": "",
                 "الرصيد السابق": f"{updated_df['Previous'].sum():,.0f}",
-                "المبلغ على النظام (System)": f"{updated_df['system'].sum():,.0f}",
+                "النظام السابق (مخزن)": f"{updated_df['previous_system'].sum():,.0f}",
+                "النظام الحالي (جديد)": f"{updated_df['system'].sum():,.0f}",
                 "المدفوع منذ آخر تحديث": f"{updated_df['Paid_Since_Last_Update'].sum():,.0f}",
                 "الدفع الزائد (Overpayment)": f"{updated_df['Overpayment'].sum():,.0f}",
                 "متبقي للدفع": f"{updated_df['Remaining_Due'].sum():,.0f}",
                 "النوع": ""
             }
             st.dataframe(pd.DataFrame([totals_row]), use_container_width=True, hide_index=True)
+
+            st.markdown("---")
+
+            # ================== حفظ البيانات تلقائياً ==================
+            save_updated_data(updated_df)
 
             st.markdown("---")
 
@@ -406,7 +356,7 @@ if menu == "لوحة التحكم":
                         green_format = workbook.add_format({'num_format': '#,##0.00', 'font_color': 'green'})
                         
                         for row_num in range(1, len(report_df) + 1):
-                            for col_num in [5, 6, 7]:
+                            for col_num in [6, 7, 8]:  # الأعمدة الرقمية المهمة
                                 val = report_df.iloc[row_num-1, col_num]
                                 try:
                                     num_val = float(str(val).replace(',', ''))
@@ -422,7 +372,7 @@ if menu == "لوحة التحكم":
                     st.download_button(
                         label="📥 تحميل ملف Excel",
                         data=output.getvalue(),
-                        file_name="etisalat_report_april_2026_final.xlsx",
+                        file_name="etisalat_payments_april_2026.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
 
@@ -432,7 +382,7 @@ if menu == "لوحة التحكم":
                     elements = []
                     
                     styles = getSampleStyleSheet()
-                    title = Paragraph("تقرير فواتير أبريل 2026 - شركة اتصالات", styles['Title'])
+                    title = Paragraph("تحديث مدفوعات اتصالات - أبريل 2026", styles['Title'])
                     elements.append(title)
                     elements.append(Spacer(1, 12))
                     
@@ -456,7 +406,7 @@ if menu == "لوحة التحكم":
                         st.download_button(
                             label="📄 تحميل ملف PDF",
                             data=f,
-                            file_name="etisalat_report_april_2026_final.pdf",
+                            file_name="etisalat_payments_april_2026.pdf",
                             mime="application/pdf"
                         )
 
@@ -479,12 +429,12 @@ if menu == "لوحة التحكم":
                     st.download_button(
                         label="🖼️ تحميل صورة التقرير",
                         data=img_bytes,
-                        file_name="etisalat_report_april_2026_final.png",
+                        file_name="etisalat_payments_april_2026.png",
                         mime="image/png"
                     )
 
         else:
-            st.info("💡 عدّلي قيم 'المبلغ على النظام (System)' في الجدول أعلاه، ثم اضغطي على زر 'تحديث النظام وحساب المدفوعات' لرؤية النتائج.")
+            st.info("💡 عدّلي قيم 'المبلغ على النظام (System) - الجديد' في الجدول أعلاه، ثم اضغطي على زر 'تحديث النظام وحساب المدفوعات' لرؤية النتائج وحفظها تلقائياً.")
 
     else:
         st.stop()
