@@ -11,7 +11,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 
 # ================== إعدادات الصفحة والثيم ==================
 st.set_page_config(
-    page_title="نظام فوتاير اتصالات",
+    page_title="تحديث فواتير اتصالات",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded"
