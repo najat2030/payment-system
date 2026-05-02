@@ -1,5 +1,11 @@
 streamlit
 pandas
 openpyxl
+xlsxwriter
 reportlab
 matplotlib
+plotly
+arabic-reshaper
+python-bidi
+Pillow
+numpy
