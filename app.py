@@ -8,8 +8,38 @@ import matplotlib.pyplot as plt
 st.set_page_config(layout="wide")
 
 DB = "database.xlsx"
+PRIMARY = "#0B6B3A"  # Royal Green
 
-# ================= إنشاء قاعدة البيانات =================
+# ================= STYLE =================
+st.markdown(f"""
+<style>
+.stApp {{
+    background-color: #f8f9fa;
+    font-family: 'Tajawal', sans-serif;
+}}
+
+.card {{
+    background: white;
+    padding: 20px;
+    border-radius: 15px;
+    text-align: center;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}}
+
+.card h3 {{
+    color: {PRIMARY};
+    margin-bottom: 10px;
+}}
+
+.card p {{
+    font-size: 22px;
+    font-weight: bold;
+}}
+
+</style>
+""", unsafe_allow_html=True)
+
+# ================= DB =================
 if not os.path.exists(DB):
     pd.DataFrame(columns=["Account","Spoc","Mobile","Previous","Invoice_April_2026","Type"])\
         .to_excel(DB, sheet_name="master", index=False)
@@ -18,7 +48,6 @@ st.title("📊 Telecom Payment System")
 
 # ================= Upload =================
 st.subheader("📂 رفع البيانات الأساسية")
-
 file = st.file_uploader("Upload Excel", type=["xlsx"])
 
 if file:
@@ -33,15 +62,12 @@ if file:
     df_upload.to_excel(DB, sheet_name="master", index=False)
     st.success("تم حفظ البيانات بنجاح")
 
-    st.rerun()  # 🔥 حل المشكلة
+    st.rerun()
 
-# ================= تحميل البيانات بعد الرفع =================
-if os.path.exists(DB):
-    master = pd.read_excel(DB, sheet_name="master")
-else:
-    master = pd.DataFrame()
+# ================= Load =================
+master = pd.read_excel(DB, sheet_name="master")
 
-# ================= إدخال القيم =================
+# ================= Input =================
 st.subheader("✍️ تحديث القيم الحالية")
 
 if not master.empty:
@@ -55,10 +81,9 @@ if not master.empty:
     if st.button("🚀 تحديث النظام"):
 
         df = master.merge(input_df, on="Mobile", how="left")
-
         df["Current"] = df["Current"].fillna(df["Previous"])
 
-        # ================= الحسابات =================
+        # ================= Calculations =================
         df["Paid"] = df.apply(
             lambda row: 0 if row["Type"] == "NonPayment" else row["Previous"] - row["Current"],
             axis=1
@@ -74,127 +99,93 @@ if not master.empty:
             axis=1
         )
 
-        # ================= Priority =================
         df["Priority"] = False
 
-        df = st.data_editor(
-            df,
-            column_config={
-                "Invoice_April_2026": st.column_config.NumberColumn("Invoice", disabled=True),
-                "Priority": st.column_config.CheckboxColumn("🔥 أولوية")
-            },
-            use_container_width=True
-        )
-
-        # ================= تحديث Previous =================
-        df.loc[df["Type"] != "NonPayment", "Previous"] = df["Current"]
-
-        df[["Account","Spoc","Mobile","Previous","Invoice_April_2026","Type"]]\
-            .to_excel(DB, sheet_name="master", index=False)
-
-        # ================= ترتيب =================
-        df = df.sort_values(by="Paid", ascending=False)
-
-        st.subheader("📋 التقرير الأساسي")
-        st.dataframe(df, use_container_width=True)
-
-        # ================= الملخص =================
+        # ================= DASHBOARD =================
         normal_df = df[df["Type"] != "NonPayment"]
 
-        col1, col2, col3 = st.columns(3)
+        c1, c2, c3 = st.columns(3)
 
-        col1.metric("💰 إجمالي المدفوع", f"{int(normal_df['Paid'].sum()):,}")
-        col2.metric("🟢 التحصيل الفعلي", f"{int(normal_df['Collection'].sum()):,}")
-        col3.metric("🔴 Overpayment", f"{int(normal_df['Overpayment'].sum()):,}")
+        c1.markdown(f'<div class="card"><h3>💰 المدفوع</h3><p>{int(normal_df["Paid"].sum()):,}</p></div>', unsafe_allow_html=True)
+        c2.markdown(f'<div class="card"><h3>🟢 التحصيل</h3><p>{int(normal_df["Collection"].sum()):,}</p></div>', unsafe_allow_html=True)
+        c3.markdown(f'<div class="card"><h3>🔴 Overpayment</h3><p>{int(normal_df["Overpayment"].sum()):,}</p></div>', unsafe_allow_html=True)
 
-        # ================= تقرير الدفع =================
-        def format_value(row):
+        # ================= Styling =================
+        def highlight(row):
+            styles = []
+
+            for col in row.index:
+                style = ""
+
+                if col == "Priority" and row["Priority"]:
+                    style = "background-color:red;color:white;font-weight:bold"
+
+                if row["Type"] == "NonPayment":
+                    style = "background-color:#d4edda;color:black"
+
+                if isinstance(row[col], (int, float)) and row[col] < 0:
+                    style = "color:red;font-weight:bold"
+
+                styles.append(style)
+
+            return styles
+
+        styled = df.style.apply(highlight, axis=1).format("{:,.2f}")
+
+        st.subheader("📋 التقرير الأساسي")
+        st.write(styled)
+
+        # ================= Payment Report =================
+        def format_val(row):
             if row["Type"] == "NonPayment":
                 return f"Non Payment - {row['Previous']}"
             return row["Current"]
 
-        df["Display"] = df.apply(format_value, axis=1)
+        df["Display"] = df.apply(format_val, axis=1)
 
-        payment_report = df[[
-            "Display","Mobile","Account","Priority","Type"
-        ]]
+        payment = df[["Display","Mobile","Account","Priority"]]
+        payment.columns = ["مبلغ مستحق","Phone","Account","Priority"]
 
-        payment_report.columns = [
-            "مبلغ مستحق",
-            "Phone Sub Account",
-            "Sub Account",
-            "Priority",
-            "Type"
-        ]
-
-        payment_report = payment_report.sort_values(
-            by="مبلغ مستحق",
-            ascending=False
-        )
-
-        st.subheader("📄 تقرير الدفع")
-        st.dataframe(payment_report, use_container_width=True)
+        payment = payment.sort_values(by="مبلغ مستحق", ascending=False)
 
         total = normal_df["Current"].sum()
+
+        st.subheader("📄 تقرير الدفع")
+        st.dataframe(payment, use_container_width=True)
+
         st.metric("💰 إجمالي المطلوب", f"{int(total):,} جنيه")
 
-        # ================= Excel =================
-        excel_df = payment_report.copy()
+        # ================= Export =================
+        excel_df = payment.copy()
+        excel_df.loc[len(excel_df)] = [total,"","الإجمالي",""]
 
-        total_row = pd.DataFrame([{
-            "مبلغ مستحق": total,
-            "Phone Sub Account": "",
-            "Sub Account": "الإجمالي",
-            "Priority": "",
-            "Type": ""
-        }])
+        excel_df.to_excel("report.xlsx", index=False)
 
-        excel_df = pd.concat([excel_df, total_row])
+        with open("report.xlsx","rb") as f:
+            st.download_button("📥 Excel", f)
 
-        excel_df.to_excel("payment_report.xlsx", index=False)
-
-        with open("payment_report.xlsx","rb") as f:
-            st.download_button("📥 تحميل Excel", f)
-
-        # ================= PDF =================
-        def generate_pdf(df):
-            file = "report.pdf"
+        # PDF
+        def pdf(df):
+            file="report.pdf"
             doc = SimpleDocTemplate(file)
-
-            data = [df.columns.tolist()] + df.values.tolist()
-
-            table = Table(data)
-            table.setStyle(TableStyle([
-                ('BACKGROUND',(0,0),(-1,0),colors.darkred),
+            data=[df.columns.tolist()]+df.values.tolist()
+            t=Table(data)
+            t.setStyle(TableStyle([
+                ('BACKGROUND',(0,0),(-1,0),colors.darkgreen),
                 ('TEXTCOLOR',(0,0),(-1,0),colors.white),
-                ('ALIGN',(0,0),(-1,-1),'CENTER'),
-                ('GRID',(0,0),(-1,-1),1,colors.black),
+                ('GRID',(0,0),(-1,-1),1,colors.black)
             ]))
-
-            doc.build([table])
+            doc.build([t])
             return file
 
-        pdf_file = generate_pdf(excel_df)
+        with open(pdf(excel_df),"rb") as f:
+            st.download_button("📄 PDF", f)
 
-        with open(pdf_file,"rb") as f:
-            st.download_button("📄 تحميل PDF", f)
+        # Image
+        fig, ax = plt.subplots(figsize=(10,6))
+        ax.axis('off')
+        ax.table(cellText=excel_df.values, colLabels=excel_df.columns, loc='center')
+        plt.savefig("report.png")
 
-        # ================= صورة =================
-        def generate_image(df):
-            fig, ax = plt.subplots(figsize=(10,6))
-            ax.axis('off')
-
-            table = ax.table(
-                cellText=df.values,
-                colLabels=df.columns,
-                loc='center'
-            )
-
-            file = "report.png"
-            plt.savefig(file, bbox_inches='tight')
-            return file
-
-        img_file = generate_image(excel_df)
-
-        with open(img_file,"rb") as f:
-            st.download_button("🖼️ تحميل صورة", f)
+        with open("report.png","rb") as f:
+            st.download_button("🖼️ صورة", f)
