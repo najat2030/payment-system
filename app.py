@@ -42,6 +42,14 @@ st.markdown(f"""
     .stDataFrame {{ border-radius: 12px; overflow: hidden; box-shadow: 0 6px 12px rgba(0,0,0,0.05); font-family: 'Tajawal', sans-serif; }}
     .stButton > button {{ background-color: {PRIMARY_COLOR}; color: white; border-radius: 8px; padding: 12px 24px; font-weight: 600; font-family: 'Tajawal', sans-serif; transition: all 0.3s ease; }}
     .stButton > button:hover {{ background-color: #0d1642; transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }}
+    
+    /* تنسيق خاص لزر تحميل قاعدة البيانات */
+    .download-db-btn {{
+        background-color: #2e7d32 !important; /* أخضر غامق مميز */
+        color: white !important;
+        font-weight: bold !important;
+        border: 2px solid #1b5e20 !important;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -75,18 +83,6 @@ def load_data():
     else:
         st.warning("⚠️ لم يتم العثور على ملف 'database.xlsx'. يرجى رفعه إلى المستودع.")
         return pd.DataFrame()
-
-def save_updated_data(df):
-    """حفظ البيانات المحدثة في ملف Excel"""
-    try:
-        # حفظ العمود system كـ previous_system للمرة القادمة
-        df["previous_system"] = df["system"].copy()
-        
-        # حفظ الملف
-        df.to_excel(DB_FILE, index=False)
-        st.success("✅ تم حفظ القيم الجديدة في ملف database.xlsx بنجاح!")
-    except Exception as e:
-        st.error(f"❌ خطأ في حفظ الملف: {e}")
 
 def format_currency(value):
     """تنسيق الأرقام كعملة"""
@@ -130,9 +126,10 @@ if menu == "لوحة التحكم":
 
         st.info("""
         💡 **طريقة الاستخدام:**  
-        افتحي تطبيق OPay → ادخلي رقم الموبايل → انسخي المبلغ المستحق على النظام → الصقيه في الجدول أدناه في عمود "المبلغ على النظام (System)".
-        
-        ⚠️ **ملاحظة:** سيتم حفظ القيم الجديدة تلقائياً في ملف Excel لاستخدامها في التحديث القادم.
+        1. افتحي تطبيق OPay → ادخلي رقم الموبايل → انسخي المبلغ المستحق على النظام.
+        2. الصقي القيمة في الجدول أدناه في عمود **"المبلغ على النظام (System) - الجديد"**.
+        3. اضغطي زر **"تحديث النظام وحساب المدفوعات"**.
+        4. **مهم جداً:** قومي بتحميل ملف البيانات المحدث من الزر الأخضر الذي سيظهر، وارفعيه إلى GitHub ليكون جاهزاً للتحديث القادم.
         """)
 
         # إنشاء نسخة قابلة للتعديل من البيانات لإدخال قيم system
@@ -193,7 +190,6 @@ if menu == "لوحة التحكم":
             if "system" in df.columns:
                 updated_df["system"] = updated_df["system"].fillna(df["system"])
             else:
-                # إذا لم يكن system موجوداً في df الأصلي، نستخدم القيمة من edited_df أو 0
                 updated_df["system"] = updated_df["system"].fillna(0)
 
             # التأكد من وجود previous_system
@@ -322,19 +318,37 @@ if menu == "لوحة التحكم":
 
             st.markdown("---")
 
-            # ================== حفظ البيانات تلقائياً ==================
-            save_updated_data(updated_df)
+            # ================== تحضير ملف Excel للتحميل (الحفظ المؤقت) ==================
+            # نقوم بإعداد ملف Excel يحتوي على البيانات المحدثة (بما فيها previous_system الجديد)
+            output_db = BytesIO()
+            with pd.ExcelWriter(output_db, engine='xlsxwriter') as writer:
+                # نستخدم updated_df لأنه يحتوي على أحدث قيم system و previous_system
+                updated_df.to_excel(writer, index=False, sheet_name='Database')
+            
+            output_db.seek(0)
+
+            st.success("✅ تم حساب المدفوعات بنجاح!")
+            st.warning("⚠️ **خطوة ضرورية:** لكي يحتفظ النظام بهذه القيم للتحديث القادم، يجب عليكِ تحميل ملف البيانات أدناه ورفعها إلى GitHub يدوياً.")
+
+            # زر تحميل ملف قاعدة البيانات المحدث
+            st.download_button(
+                label="📥 تحميل ملف database.xlsx المحدث (للرفع على GitHub)",
+                data=output_db,
+                file_name="database.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="download_db_btn"
+            )
 
             st.markdown("---")
 
-            # ================== قسم التصدير ==================
-            st.subheader("📥 تصدير التقرير")
+            # ================== قسم تصدير التقارير (Excel/PDF/Image) ==================
+            st.subheader("📥 تصدير تقرير العرض فقط")
             exp_col1, exp_col2, exp_col3 = st.columns(3)
             
             with exp_col1:
-                if st.button("تصدير Excel"):
-                    output = BytesIO()
-                    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                if st.button("تصدير تقرير Excel"):
+                    output_report = BytesIO()
+                    with pd.ExcelWriter(output_report, engine='xlsxwriter') as writer:
                         report_df.to_excel(writer, index=False, sheet_name='Report')
                         workbook = writer.book
                         worksheet = writer.sheets['Report']
@@ -370,14 +384,15 @@ if menu == "لوحة التحكم":
                                     worksheet.write(row_num, col_num, val, number_format)
                     
                     st.download_button(
-                        label="📥 تحميل ملف Excel",
-                        data=output.getvalue(),
-                        file_name="etisalat_payments_april_2026.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        label="📄 تحميل تقرير Excel",
+                        data=output_report.getvalue(),
+                        file_name="etisalat_payments_report_april_2026.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key="download_report_excel"
                     )
 
             with exp_col2:
-                if st.button("تصدير PDF"):
+                if st.button("تصدير تقرير PDF"):
                     doc = SimpleDocTemplate("report.pdf", pagesize=landscape(A4))
                     elements = []
                     
@@ -404,10 +419,11 @@ if menu == "لوحة التحكم":
                     
                     with open("report.pdf", "rb") as f:
                         st.download_button(
-                            label="📄 تحميل ملف PDF",
+                            label="📄 تحميل تقرير PDF",
                             data=f,
-                            file_name="etisalat_payments_april_2026.pdf",
-                            mime="application/pdf"
+                            file_name="etisalat_payments_report_april_2026.pdf",
+                            mime="application/pdf",
+                            key="download_report_pdf"
                         )
 
             with exp_col3:
@@ -429,12 +445,13 @@ if menu == "لوحة التحكم":
                     st.download_button(
                         label="🖼️ تحميل صورة التقرير",
                         data=img_bytes,
-                        file_name="etisalat_payments_april_2026.png",
-                        mime="image/png"
+                        file_name="etisalat_payments_report_april_2026.png",
+                        mime="image/png",
+                        key="download_report_img"
                     )
 
         else:
-            st.info("💡 عدّلي قيم 'المبلغ على النظام (System) - الجديد' في الجدول أعلاه، ثم اضغطي على زر 'تحديث النظام وحساب المدفوعات' لرؤية النتائج وحفظها تلقائياً.")
+            st.info("💡 عدّلي قيم 'المبلغ على النظام (System) - الجديد' في الجدول أعلاه، ثم اضغطي على زر 'تحديث النظام وحساب المدفوعات'.")
 
     else:
         st.stop()
