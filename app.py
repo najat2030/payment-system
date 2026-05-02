@@ -24,9 +24,9 @@ PRIMARY_COLOR = "#8B0000"  # أحمر ملكي
 SECONDARY_COLOR = "#FFFFFF" # خلفية بيضاء
 ACCENT_COLOR = "#F8F9FA"   # رمادي فاتح للخلفيات
 TEXT_COLOR = "#333333"
-RED_COLOR = "#D32F2F"
-GREEN_COLOR = "#388E3C"
-YELLOW_COLOR = "#FFEB3B"
+RED_COLOR = "#D32F2F"      # أحمر غامق للـ Overpayment
+GREEN_COLOR = "#388E3C"    # أخضر للمدفوعات الطبيعية
+YELLOW_COLOR = "#FFEB3B"   # أصفر للزيادات (اختياري)
 
 # تطبيق CSS مخصص
 st.markdown(f"""
@@ -112,6 +112,13 @@ st.markdown(f"""
     .stButton > button:hover {{
         background-color: #6d0000;
     }}
+
+    /* تنسيق خاص لـ Overpayment */
+    .overpayment {{
+        color: {RED_COLOR} !important;
+        font-weight: bold !important;
+        background-color: #ffebee !important;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -135,6 +142,9 @@ def load_data():
         st.warning("لم يتم العثور على ملف 'database.xlsx'. يرجى رفعه إلى المستودع.")
         return pd.DataFrame()
 
+def save_data(df):
+    df.to_excel(DB_FILE, index=False)
+
 def format_currency(value):
     if pd.isna(value):
         return "0.00"
@@ -157,12 +167,6 @@ if menu == "لوحة التحكم":
     if df.empty:
         st.stop()
 
-    # حساب القيم الأساسية
-    total_paid = df[df['Type'] != 'NonPayment']['Previous'].sum()
-    total_due = df[df['Type'] != 'NonPayment']['Invoice_April_2026'].sum()
-    num_customers = len(df)
-    num_paid_customers = len(df[df['Type'] != 'NonPayment'])
-
     # عرض الهيدر
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M')
     st.markdown(f"""
@@ -178,207 +182,267 @@ if menu == "لوحة التحكم":
     </div>
     """, unsafe_allow_html=True)
 
-    # المقاييس العلوية
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        st.metric(label="إجمالي المدفوع", value=f"{total_paid:,.0f} جنيه")
-    with c2:
-        st.metric(label="إجمالي مستحق الدفع", value=f"{total_due:,.0f} جنيه")
-    with c3:
-        st.metric(label="عدد العملاء", value=num_customers)
-    with c4:
-        st.metric(label="عدد العملاء الذين دفعوا", value=num_paid_customers)
+    # ================== قسم تحديث القيم الحالية ==================
+    st.subheader("✍️ تحديث القيم الحالية (الرصيد الجديد)")
 
-    st.markdown("---")
+    # إنشاء نسخة editable من البيانات
+    editable_df = df[["Account No.", "Spoc", "Mobile", "Previous", "Type"]].copy()
+    editable_df.rename(columns={"Previous": "Current"}, inplace=True)
 
-    # أزرار الإجراءات
-    col_btn1, col_btn2 = st.columns(2)
-    with col_btn1:
-        if st.button("رفع تقرير جديد"):
-            st.info("خاصية رفع التقارير الجديدة قيد التطوير.")
-    with col_btn2:
-        if st.button("تحديث النظام"):
-            st.rerun()
+    # إخفاء صفوف NonPayment من التعديل (أو يمكن تركها حسب الرغبة)
+    editable_df = editable_df[editable_df["Type"] != "NonPayment"]
 
-    st.markdown("---")
-
-    # تحضير الجدول المتقدم
-    st.subheader("تفاصيل الفواتير والمدفوعات")
-
-    # إنشاء نسخة للعمل عليها
-    report_df = df.copy()
-
-    # إضافة عمود "System" (مبالغ مجنبية زيرو خصم) — هنا نفترض أنه يساوي Previous إلا إذا كان NonPayment
-    report_df['System'] = report_df.apply(
-        lambda row: 0 if row['Type'] == 'NonPayment' else row['Previous'], axis=1
+    # استخدام data_editor للسماح بالتعديل المباشر
+    edited_df = st.data_editor(
+        editable_df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Current": st.column_config.NumberColumn(
+                "الرصيد الحالي",
+                help="أدخل الرصيد الجديد لهذا الحساب",
+                min_value=0,
+                step=0.01,
+                format="%.2f"
+            )
+        }
     )
 
-    # إضافة عمود "مستحق الدفع" = Invoice - System
-    report_df['مستحق الدفع'] = report_df['Invoice_April_2026'] - report_df['System']
+    # زر لتحديث النظام
+    if st.button("🚀 تحديث النظام وحساب المدفوعات"):
+        # دمج البيانات المعدلة مع الأصلية
+        updated_df = df.merge(edited_df[["Account No.", "Current"]], on="Account No.", how="left")
+        
+        # إذا لم يتم تعديل بعض الصفوف، نحتفظ بالقيمة القديمة
+        updated_df["Current"] = updated_df["Current"].fillna(updated_df["Previous"])
 
-    # تنسيق الأرقام
-    for col in ['Previous', 'Invoice_April_2026', 'System', 'مستحق الدفع']:
-        report_df[col] = report_df[col].apply(format_currency)
+        # حساب المبلغ المدفوع = Previous - Current
+        # إذا كان Current > Previous → النتيجة سالبة → Overpayment
+        updated_df["Paid"] = updated_df.apply(
+            lambda row: 0 if row["Type"] == "NonPayment" else row["Previous"] - row["Current"], axis=1
+        )
 
-    # إعادة ترتيب الأعمدة لتطابق التقرير اليدوي
-    report_df = report_df[[
-        "Account No.", 
-        "Spoc", 
-        "Mobile", 
-        "System", 
-        "Invoice_April_2026", 
-        "مستحق الدفع", 
-        "Type"
-    ]]
+        # حساب Overpayment (إذا كان Paid سالباً)
+        updated_df["Overpayment"] = updated_df["Paid"].apply(lambda x: abs(x) if x < 0 else 0)
 
-    # تسمية الأعمدة بالعربية
-    report_df.rename(columns={
-        "Account No.": "رقم الحساب",
-        "Spoc": "اسم العميل/الجهة",
-        "Mobile": "رقم الهاتف",
-        "System": "مبالغ مجنبية زيرو خصم",
-        "Invoice_April_2026": "الفاتورة الصادرة أبريل 2026",
-        "مستحق الدفع": "مستحق الدفع",
-        "Type": "النوع"
-    }, inplace=True)
+        # حساب Collection (المبلغ الذي تم تحصيله فعلياً، لا يتجاوز Previous)
+        updated_df["Collection"] = updated_df.apply(
+            lambda row: 0 if row["Type"] == "NonPayment" else min(row["Paid"], row["Previous"]) if row["Paid"] > 0 else 0, axis=1
+        )
 
-    # عرض الجدول مع تنسيق شرطي (ألوان حسب القيمة)
-    def highlight_negative(val):
-        if isinstance(val, str):
-            try:
-                num_val = float(val.replace(',', ''))
-                if num_val < 0:
-                    return f'color: {RED_COLOR}; font-weight: bold;'
-                elif num_val > 0:
-                    return f'color: {GREEN_COLOR};'
-                else:
-                    return 'color: gray;'
-            except:
-                return ''
-        return ''
+        # حفظ البيانات المحدثة (اختياري — يمكنك إلغاء التعليق إذا أردت الحفظ الدائم)
+        # save_data(updated_df)
 
-    styled_df = report_df.style.applymap(highlight_negative, subset=['مبالغ مجنبية زيرو خصم', 'الفاتورة الصادرة أبريل 2026', 'مستحق الدفع'])
+        # ================== عرض المقاييس بعد التحديث ==================
+        normal_df = updated_df[updated_df['Type'] != 'NonPayment']
+        total_paid = normal_df['Paid'].sum()
+        total_collection = normal_df['Collection'].sum()
+        total_overpayment = normal_df['Overpayment'].sum()
 
-    st.dataframe(styled_df, use_container_width=True, hide_index=True)
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            st.metric(label="إجمالي المدفوع", value=f"{total_paid:,.0f} جنيه")
+        with c2:
+            st.metric(label="إجمالي التحصيل", value=f"{total_collection:,.0f} جنيه")
+        with c3:
+            st.metric(label="إجمالي Overpayment", value=f"{total_overpayment:,.0f} جنيه", delta_color="inverse")
+        with c4:
+            st.metric(label="عدد العملاء", value=len(normal_df))
 
-    # إضافة صف الإجمالي
-    totals_row = {
-        "رقم الحساب": "إجمالي المديونية على السيستم",
-        "اسم العميل/الجهة": "",
-        "رقم الهاتف": "",
-        "مبالغ مجنبية زيرو خصم": f"{df['Previous'].sum():,.0f}",
-        "الفاتورة الصادرة أبريل 2026": f"{df['Invoice_April_2026'].sum():,.0f}",
-        "مستحق الدفع": f"{(df['Invoice_April_2026'] - df['Previous']).sum():,.0f}",
-        "النوع": ""
-    }
-    st.dataframe(pd.DataFrame([totals_row]), use_container_width=True, hide_index=True)
+        st.markdown("---")
 
-    st.markdown("---")
+        # ================== عرض الجدول النهائي ==================
+        st.subheader("تفاصيل الفواتير والمدفوعات بعد التحديث")
 
-    # قسم التصدير
-    st.subheader("تصدير التقرير")
-    exp_col1, exp_col2, exp_col3 = st.columns(3)
-    
-    with exp_col1:
-        if st.button("تصدير Excel"):
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                report_df.to_excel(writer, index=False, sheet_name='Report')
-                workbook = writer.book
-                worksheet = writer.sheets['Report']
+        # تحضير الجدول للعرض
+        report_df = updated_df.copy()
+
+        # إضافة عمود "System" (نفترض أنه يساوي Previous إلا إذا كان NonPayment)
+        report_df['System'] = report_df.apply(
+            lambda row: 0 if row['Type'] == 'NonPayment' else row['Previous'], axis=1
+        )
+
+        # إضافة عمود "مستحق الدفع" = Invoice - System
+        report_df['مستحق الدفع'] = report_df['Invoice_April_2026'] - report_df['System']
+
+        # تنسيق الأرقام
+        for col in ['Previous', 'Current', 'Paid', 'Collection', 'Overpayment', 'System', 'مستحق الدفع']:
+            report_df[col] = report_df[col].apply(format_currency)
+
+        # إعادة ترتيب الأعمدة
+        report_df = report_df[[
+            "Account No.", 
+            "Spoc", 
+            "Mobile", 
+            "Previous", 
+            "Current", 
+            "Paid", 
+            "Overpayment", 
+            "System", 
+            "Invoice_April_2026", 
+            "مستحق الدفع", 
+            "Type"
+        ]]
+
+        # تسمية الأعمدة بالعربية
+        report_df.rename(columns={
+            "Account No.": "رقم الحساب",
+            "Spoc": "اسم العميل/الجهة",
+            "Mobile": "رقم الهاتف",
+            "Previous": "الرصيد السابق",
+            "Current": "الرصيد الحالي",
+            "Paid": "المبلغ المدفوع",
+            "Overpayment": "الدفع الزائد (Overpayment)",
+            "System": "مبالغ مجنبية زيرو خصم",
+            "Invoice_April_2026": "الفاتورة الصادرة أبريل 2026",
+            "مستحق الدفع": "مستحق الدفع",
+            "Type": "النوع"
+        }, inplace=True)
+
+        # تطبيق التنسيق الشرطي للألوان
+        def highlight_values(val):
+            if isinstance(val, str):
+                try:
+                    num_val = float(val.replace(',', ''))
+                    if num_val < 0:
+                        return f'color: {RED_COLOR}; font-weight: bold; background-color: #ffebee;'
+                    elif num_val > 0:
+                        return f'color: {GREEN_COLOR};'
+                    else:
+                        return 'color: gray;'
+                except:
+                    return ''
+            return ''
+
+        styled_df = report_df.style.applymap(highlight_values, subset=['المبلغ المدفوع', 'الدفع الزائد (Overpayment)', 'مستحق الدفع'])
+
+        st.dataframe(styled_df, use_container_width=True, hide_index=True)
+
+        # إضافة صف الإجمالي
+        totals_row = {
+            "رقم الحساب": "إجمالي",
+            "اسم العميل/الجهة": "",
+            "رقم الهاتف": "",
+            "الرصيد السابق": f"{updated_df['Previous'].sum():,.0f}",
+            "الرصيد الحالي": f"{updated_df['Current'].sum():,.0f}",
+            "المبلغ المدفوع": f"{updated_df['Paid'].sum():,.0f}",
+            "الدفع الزائد (Overpayment)": f"{updated_df['Overpayment'].sum():,.0f}",
+            "مبالغ مجنبية زيرو خصم": f"{updated_df['System'].sum():,.0f}",
+            "الفاتورة الصادرة أبريل 2026": f"{updated_df['Invoice_April_2026'].sum():,.0f}",
+            "مستحق الدفع": f"{(updated_df['Invoice_April_2026'] - updated_df['System']).sum():,.0f}",
+            "النوع": ""
+        }
+        st.dataframe(pd.DataFrame([totals_row]), use_container_width=True, hide_index=True)
+
+        st.markdown("---")
+
+        # قسم التصدير (نفس الكود السابق لكن مع الأعمدة الجديدة)
+        st.subheader("تصدير التقرير")
+        exp_col1, exp_col2, exp_col3 = st.columns(3)
+        
+        with exp_col1:
+            if st.button("تصدير Excel"):
+                output = BytesIO()
+                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                    report_df.to_excel(writer, index=False, sheet_name='Report')
+                    workbook = writer.book
+                    worksheet = writer.sheets['Report']
+                    
+                    header_format = workbook.add_format({
+                        'bold': True, 
+                        'text_wrap': True, 
+                        'valign': 'top', 
+                        'fg_color': PRIMARY_COLOR, 
+                        'font_color': 'white',
+                        'border': 1
+                    })
+                    for col_num, value in enumerate(report_df.columns.values):
+                        worksheet.write(0, col_num, value, header_format)
+                    
+                    number_format = workbook.add_format({'num_format': '#,##0.00'})
+                    red_format = workbook.add_format({'num_format': '#,##0.00', 'font_color': 'red', 'bg_color': '#ffebee'})
+                    green_format = workbook.add_format({'num_format': '#,##0.00', 'font_color': 'green'})
+                    
+                    for row_num in range(1, len(report_df) + 1):
+                        for col_num in [5, 6, 9]: # الأعمدة الرقمية المهمة (Paid, Overpayment, مستحق الدفع)
+                            val = report_df.iloc[row_num-1, col_num]
+                            try:
+                                num_val = float(val.replace(',', ''))
+                                if num_val < 0:
+                                    worksheet.write(row_num, col_num, num_val, red_format)
+                                elif num_val > 0:
+                                    worksheet.write(row_num, col_num, num_val, green_format)
+                                else:
+                                    worksheet.write(row_num, col_num, num_val, number_format)
+                            except:
+                                worksheet.write(row_num, col_num, val, number_format)
                 
-                header_format = workbook.add_format({
-                    'bold': True, 
-                    'text_wrap': True, 
-                    'valign': 'top', 
-                    'fg_color': PRIMARY_COLOR, 
-                    'font_color': 'white',
-                    'border': 1
-                })
-                for col_num, value in enumerate(report_df.columns.values):
-                    worksheet.write(0, col_num, value, header_format)
-                
-                number_format = workbook.add_format({'num_format': '#,##0.00'})
-                red_format = workbook.add_format({'num_format': '#,##0.00', 'font_color': 'red'})
-                green_format = workbook.add_format({'num_format': '#,##0.00', 'font_color': 'green'})
-                
-                for row_num in range(1, len(report_df) + 1):
-                    for col_num in [3, 4, 5]: # الأعمدة الرقمية
-                        val = report_df.iloc[row_num-1, col_num]
-                        try:
-                            num_val = float(val.replace(',', ''))
-                            if num_val < 0:
-                                worksheet.write(row_num, col_num, num_val, red_format)
-                            elif num_val > 0:
-                                worksheet.write(row_num, col_num, num_val, green_format)
-                            else:
-                                worksheet.write(row_num, col_num, num_val, number_format)
-                        except:
-                            worksheet.write(row_num, col_num, val, number_format)
-            
-            st.download_button(
-                label="📥 تحميل ملف Excel",
-                data=output.getvalue(),
-                file_name="etisalat_report_april_2026.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-
-    with exp_col2:
-        if st.button("تصدير PDF"):
-            doc = SimpleDocTemplate("report.pdf", pagesize=landscape(A4))
-            elements = []
-            
-            styles = getSampleStyleSheet()
-            title = Paragraph("تقرير فواتير أبريل 2026 - شركة اتصالات", styles['Title'])
-            elements.append(title)
-            elements.append(Spacer(1, 12))
-            
-            data = [report_df.columns.tolist()] + report_df.values.tolist()
-            table = Table(data)
-            table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor(PRIMARY_COLOR)),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-                ('FONTSIZE', (0, 0), (-1, -1), 8),
-                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-                ('GRID', (0, 0), (-1, -1), 1, colors.black)
-            ]))
-            
-            elements.append(table)
-            doc.build(elements)
-            
-            with open("report.pdf", "rb") as f:
                 st.download_button(
-                    label=" تحميل ملف PDF",
-                    data=f,
-                    file_name="etisalat_report_april_2026.pdf",
-                    mime="application/pdf"
+                    label="📥 تحميل ملف Excel",
+                    data=output.getvalue(),
+                    file_name="etisalat_report_april_2026_updated.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
 
-    with exp_col3:
-        if st.button("تصدير صورة"):
-            fig = go.Figure(data=[go.Table(
-                header=dict(values=list(report_df.columns),
-                            fill_color=PRIMARY_COLOR,
-                            align='center',
-                            font=dict(color='white', size=12)),
-                cells=dict(values=[report_df[col] for col in report_df.columns],
-                           fill_color='lavender',
-                           align='center'))
-            ])
-            
-            img_bytes = BytesIO()
-            fig.write_image(img_bytes, format="png", scale=2)
-            img_bytes.seek(0)
-            
-            st.download_button(
-                label="🖼️ تحميل صورة التقرير",
-                data=img_bytes,
-                file_name="etisalat_report_april_2026.png",
-                mime="image/png"
-            )
+        with exp_col2:
+            if st.button("تصدير PDF"):
+                doc = SimpleDocTemplate("report.pdf", pagesize=landscape(A4))
+                elements = []
+                
+                styles = getSampleStyleSheet()
+                title = Paragraph("تقرير فواتير أبريل 2026 - شركة اتصالات (محدث)", styles['Title'])
+                elements.append(title)
+                elements.append(Spacer(1, 12))
+                
+                data = [report_df.columns.tolist()] + report_df.values.tolist()
+                table = Table(data)
+                table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor(PRIMARY_COLOR)),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                    ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 8),
+                    ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                    ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                    ('GRID', (0, 0), (-1, -1), 1, colors.black)
+                ]))
+                
+                elements.append(table)
+                doc.build(elements)
+                
+                with open("report.pdf", "rb") as f:
+                    st.download_button(
+                        label=" تحميل ملف PDF",
+                        data=f,
+                        file_name="etisalat_report_april_2026_updated.pdf",
+                        mime="application/pdf"
+                    )
+
+        with exp_col3:
+            if st.button("تصدير صورة"):
+                fig = go.Figure(data=[go.Table(
+                    header=dict(values=list(report_df.columns),
+                                fill_color=PRIMARY_COLOR,
+                                align='center',
+                                font=dict(color='white', size=12)),
+                    cells=dict(values=[report_df[col] for col in report_df.columns],
+                               fill_color='lavender',
+                               align='center'))
+                ])
+                
+                img_bytes = BytesIO()
+                fig.write_image(img_bytes, format="png", scale=2)
+                img_bytes.seek(0)
+                
+                st.download_button(
+                    label="🖼️ تحميل صورة التقرير",
+                    data=img_bytes,
+                    file_name="etisalat_report_april_2026_updated.png",
+                    mime="image/png"
+                )
+
+    else:
+        st.info("اضغط على زر 'تحديث النظام وحساب المدفوعات' لرؤية النتائج بعد إدخال القيم الجديدة.")
 
 else:
     st.info(f"صفحة '{menu}' قيد الإنشاء.")
