@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import os
-import numpy as np
 from datetime import datetime
 import plotly.express as px
 import plotly.graph_objects as go
@@ -12,12 +11,6 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import landscape, A4
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-# ملاحظة: لاستخدام خط عربي في ReportLab، يجب تحميل ملف خط (.ttf) ودعمه.
-# للتبسيط، سنستخدم الخط الافتراضي الذي قد لا يدعم العربية بشكل كامل في الجداول المعقدة.
-# لحل مشكلة العربية في PDF بشكل مثالي، يُنصح باستخدام مكتبات أخرى أو خطوط مدمجة تدعم unicode.
-# هنا سنحاول استخدام نهج مبسط.
 
 # ================== إعدادات الصفحة والثيم ==================
 st.set_page_config(
@@ -43,7 +36,7 @@ st.markdown(f"""
         background-color: {SECONDARY_COLOR};
     }}
     .stApp {{
-        font-family: 'Tajawal', sans-serif; /* Assuming a font is available or using default */
+        font-family: 'Tajawal', sans-serif;
     }}
     
     /* Sidebar Styling */
@@ -127,37 +120,27 @@ st.markdown(f"""
 </style>
 """, unsafe_allow_html=True)
 
-# ================== إدارة البيانات (Mock Data for Demo) ==================
-DB_FILE = "telecom_data.xlsx"
+# ================== إدارة البيانات ==================
+DB_FILE = "database.xlsx"
 
 def load_data():
-    """تحميل البيانات من ملف إكسل أو إنشاء بيانات تجريبية إذا لم يوجد الملف."""
+    """تحميل البيانات من ملف إكسل أو عرض رسالة خطأ إذا لم يوجد."""
     if os.path.exists(DB_FILE):
         try:
             df = pd.read_excel(DB_FILE)
+            # تأكد من وجود الأعمدة المطلوبة
+            required_cols = ["Account No.", "Spoc", "Mobile", "Invoice_April_2026", "Previous", "Type"]
+            missing_cols = [col for col in required_cols if col not in df.columns]
+            if missing_cols:
+                st.error(f"الأعمدة التالية مفقودة في ملف البيانات: {missing_cols}")
+                return pd.DataFrame()
             return df
         except Exception as e:
             st.error(f"خطأ في قراءة ملف البيانات: {e}")
-            return create_mock_data()
+            return pd.DataFrame()
     else:
-        return create_mock_data()
-
-def create_mock_data():
-    """إنشاء بيانات تجريبية تحاكي الهيكل المطلوب."""
-    data = {
-        "Account No.": [6133531, 61335317567, 61335317568, 61335317569, 61335317570, 61335317571, 61335317572, 613353116737, 61335317574, 61335317575, 61335317576, 61335318491],
-        "Spoc": ["منافذنا", "المكتب", "منافذ 3", "منافذنا ٢", "منافذ كوم امبو", "Omar Sayed", "Non Payment", "هيئات الدردقة", "منافذ ؟", "Suspend", "Ahmad Bakry", "هيئات اخرى"],
-        "Phone Sub Account": ["01121800500", "01157000776", "01102030200", "01140095047", "01125101080", "01158111464", "-", "01100230713", "01146636611", "01155666925", "01123662616", "01158226650"],
-        "Previous Balance": [10000, 0, 0, 0, 0, 1800, 0, 200, 0, 1462.39, 0, 5961.11],
-        "Invoice April 2026": [101722.75, 76567.16, 84700.04, 70934.15, 41159.21, 331849.58, 0, 160348.81, 4040.54, -867.39, 16839.79, 171360.40],
-        "System": [42494.75, 34595.16, 7193.96, 42813.58, -1800.00, 197797.58, 101680.29, 76608.81, 0.00, -1462.39, 20.35, 27319.40],
-        "Type": ["Normal"] * 11 + ["NonPayment"]
-    }
-    df = pd.DataFrame(data)
-    # إعادة ترتيب الأعمدة لتطابق الصورة تقريباً
-    df = df[["Account No.", "Spoc", "Phone Sub Account", "Previous Balance", "Invoice April 2026", "System", "Type"]]
-    df.to_excel(DB_FILE, index=False)
-    return df
+        st.warning("لم يتم العثور على ملف 'database.xlsx'. يرجى رفعه إلى المستودع.")
+        return pd.DataFrame()
 
 def save_data(df):
     """حفظ البيانات بعد التعديل."""
@@ -183,7 +166,7 @@ def get_display_text(text):
 
 # --- الشريط الجانبي ---
 with st.sidebar:
-    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/Etisalat_logo.svg/1200px-Etisalat_logo.svg.png", width=150) # شعار تقريبي
+    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/Etisalat_logo.svg/1200px-Etisalat_logo.svg.png", width=150)
     st.markdown("---")
     menu = st.radio("القائمة", ["لوحة التحكم", "رفع تقرير جديد", "التقارير السابقة", "العملاء", "الإعدادات"])
     st.markdown("---")
@@ -197,14 +180,18 @@ if menu == "لوحة التحكم":
     # تحميل البيانات
     df = load_data()
 
+    if df.empty:
+        st.stop()
+
     # حساب القيم للمقاييس العلوية
-    total_paid = df[df['Type'] != 'NonPayment']['Previous Balance'].sum()
-    total_due = df[df['Type'] != 'NonPayment']['Invoice April 2026'].sum()
+    total_paid = df[df['Type'] != 'NonPayment']['Previous'].sum()
+    total_due = df[df['Type'] != 'NonPayment']['Invoice_April_2026'].sum()
     num_customers = len(df)
     num_paid_customers = len(df[df['Type'] != 'NonPayment'])
 
     # عرض الهيدر
-    st.markdown("""
+    current_time = datetime.now().strftime('%Y-%m-%d %H:%M')
+    st.markdown(f"""
     <div class="dashboard-header">
         <div>
             <h1>إجمالي فواتير - April 2026</h1>
@@ -212,10 +199,10 @@ if menu == "لوحة التحكم":
         </div>
         <div class="date-info">
             آخر تحديث<br>
-            {datetime.now().strftime('%Y-%m-%d %H:%M')}
+            {current_time}
         </div>
     </div>
-    """.format(datetime=datetime.now()), unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
     # عرض المقاييس (Metrics)
     c1, c2, c3, c4 = st.columns(4)
@@ -239,11 +226,11 @@ if menu == "لوحة التحكم":
         if st.button("تحديث النظام"):
             st.rerun()
     with col_btn3:
-        pass # Placeholder for Excel button logic later
+        pass
     with col_btn4:
-        pass # Placeholder for PDF button logic later
+        pass
     with col_btn5:
-        pass # Placeholder for Image button logic later
+        pass
 
     st.markdown("---")
 
@@ -252,18 +239,16 @@ if menu == "لوحة التحكم":
     
     # تحضير البيانات للعرض
     display_df = df.copy()
-    display_df['Previous Balance'] = display_df['Previous Balance'].apply(format_currency)
-    display_df['Invoice April 2026'] = display_df['Invoice April 2026'].apply(format_currency)
-    display_df['System'] = display_df['System'].apply(format_currency)
+    display_df['Previous'] = display_df['Previous'].apply(format_currency)
+    display_df['Invoice_April_2026'] = display_df['Invoice_April_2026'].apply(format_currency)
     
     # تسمية الأعمدة بالعربية للعرض
     display_df.rename(columns={
         "Account No.": "رقم الحساب",
         "Spoc": "اسم العميل/الجهة",
-        "Phone Sub Account": "رقم الهاتف",
-        "Previous Balance": "المدفوع من آخر تحديث",
-        "Invoice April 2026": "الفاتورة الصادرة أبريل 2026",
-        "System": "النظام",
+        "Mobile": "رقم الهاتف",
+        "Previous": "المدفوع من آخر تحديث",
+        "Invoice_April_2026": "الفاتورة الصادرة أبريل 2026",
         "Type": "النوع"
     }, inplace=True)
 
@@ -292,7 +277,7 @@ if menu == "لوحة التحكم":
                 # تنسيق الأرقام
                 number_format = workbook.add_format({'num_format': '#,##0.00'})
                 for row_num in range(1, len(df) + 1):
-                    for col_num in range(3, 6): # أعمدة الأرقام
+                    for col_num in [3, 4]: # أعمدة Invoice_April_2026 و Previous
                         worksheet.write(row_num, col_num, df.iloc[row_num-1, col_num], number_format)
             
             st.download_button(
@@ -322,7 +307,7 @@ if menu == "لوحة التحكم":
                 ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor(PRIMARY_COLOR)),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
                 ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'), # خط افتراضي، قد لا يدعم العربية
+                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
                 ('FONTSIZE', (0, 0), (-1, -1), 8),
                 ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
                 ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
