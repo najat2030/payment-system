@@ -2,37 +2,16 @@ import streamlit as st
 import pandas as pd
 import os
 from datetime import datetime
-import plotly.graph_objects as go
 from io import BytesIO
 
-# ================== إعدادات الصفحة والثيم ==================
-st.set_page_config(
-    page_title="تحديث مدفوعات اتصالات",
-    page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# ================== إعدادات الصفحة ==================
+st.set_page_config(page_title="تحديث مدفوعات اتصالات", layout="wide")
 
-# ألوان احترافية
-PRIMARY_COLOR = "#1a237e"
-SECONDARY_COLOR = "#ffffff"
-TEXT_COLOR = "#333333"
-RED_COLOR = "#d32f2f"
-GREEN_COLOR = "#388e3c"
-
-st.markdown(f"""
+st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap');
-    .main {{ background-color: {SECONDARY_COLOR}; font-family: 'Tajawal', sans-serif; }}
-    [data-testid="stSidebar"] {{ background-color: {PRIMARY_COLOR}; }}
-    .dashboard-header {{ 
-        background: linear-gradient(135deg, {PRIMARY_COLOR} 0%, #283593 100%); 
-        color: white; padding: 25px; border-radius: 15px; margin-bottom: 25px; 
-    }}
-    div[data-testid="stMetric"] {{ 
-        background-color: white; padding: 20px; border-radius: 12px; 
-        box-shadow: 0 4px 8px rgba(0,0,0,0.05); border-top: 4px solid {PRIMARY_COLOR}; 
-    }}
+    @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap');
+    body, div, h1, p, span, .stMetric { font-family: 'Tajawal', sans-serif; direction: rtl; text-align: right; }
+    .stMetric { background-color: #ffffff; border: 2px solid #1a237e; border-radius: 15px; padding: 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
 </style>
 """, unsafe_allow_html=True)
 
@@ -41,105 +20,101 @@ DB_FILE = "database.xlsx"
 
 def load_data():
     if os.path.exists(DB_FILE):
-        try:
-            df = pd.read_excel(DB_FILE)
-            # التأكد من تحويل أرقام الحسابات لنصوص لضمان دقة الربط
-            df["Account No."] = df["Account No."].astype(str)
-            
-            # إذا لم يكن عمود previous_system موجوداً، ننشئه من عمود system الحالي
-            if "previous_system" not in df.columns:
-                df["previous_system"] = df["system"].copy()
-            
-            return df
-        except Exception as e:
-            st.error(f"❌ خطأ في قراءة ملف البيانات: {e}")
-            return pd.DataFrame()
-    else:
-        st.warning("⚠️ ملف 'database.xlsx' غير موجود.")
-        return pd.DataFrame()
+        df = pd.read_excel(DB_FILE)
+        # توحيد نوع رقم الحساب لضمان الربط الصحيح
+        df["Account No."] = df["Account No."].astype(str)
+        # إنشاء عمود النظام السابق إذا لم يوجد
+        if "previous_system" not in df.columns:
+            df["previous_system"] = df["system"].copy()
+        return df
+    return pd.DataFrame()
 
-def format_currency(value):
-    if pd.isna(value): return "0.00"
-    return f"{value:,.2f}"
+df = load_data()
 
-# ================== واجهة المستخدم ==================
-with st.sidebar:
-    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/Etisalat_logo.svg/1200px-Etisalat_logo.svg.png", width=150)
-    st.markdown("---")
-    menu = st.radio("القائمة", ["لوحة التحكم", "العملاء", "الإعدادات"])
-
-if menu == "لوحة التحكم":
-    df = load_data()
+if not df.empty:
+    st.title("📊 نظام تحديث التحصيل الدوري")
     
-    if not df.empty:
-        current_time = datetime.now().strftime('%Y-%m-%d %H:%M')
-        st.markdown(f"""
-        <div class="dashboard-header">
-            <h1>تحديث مدفوعات اتصالات - April 2026</h1>
-            <p>حساب منطقة البحر الأحمر للتأمين الصحي | آخر تحديث: {current_time}</p>
-        </div>
-        """, unsafe_allow_html=True)
+    # 1. إدخال المبالغ الجديدة (الشاشة التي تستخدمينها)
+    st.subheader("✍️ إدخال المبالغ الحالية من تطبيق OPay")
+    
+    # تحضير جدول التعديل
+    edit_df = df[["Account No.", "Spoc", "system", "previous_system"]].copy()
+    
+    edited_data = st.data_editor(
+        edit_df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Account No.": "رقم الحساب",
+            "Spoc": "الجهة",
+            "system": st.column_config.NumberColumn("المبلغ الحالي (System)", format="%.2f"),
+            "previous_system": st.column_config.NumberColumn("المبلغ السابق", disabled=True)
+        }
+    )
 
-        st.subheader("✍️ تحديث المبالغ من تطبيق OPay")
+    if st.button("🚀 تحديث وحساب التحصيلات"):
+        # تحديث قيم السيستم في الـ DataFrame الأصلي
+        updates = edited_data.set_index("Account No.")["system"].to_dict()
+        df["system"] = df["Account No."].map(updates).fillna(df["system"])
         
-        # عرض الجدول القابل للتعديل
-        editable_df = df[["Account No.", "Spoc", "Mobile", "system", "previous_system", "Type"]].copy()
+        # 2. الحسابات الذكية (تطبيق شروطك الخاصة)
+        # حساب مدفوعات اليوم (مع استبعاد الحساب المستثنى والـ NonPayment)
+        def calculate_daily_payment(row):
+            # استبعاد الحساب رقم 6.133531.7572 أو أي NonPayment
+            if row["Account No."] == "6.133531.7572" or row["Type"] == "NonPayment":
+                return 0
+            return max(0, row["previous_system"] - row["system"])
+
+        df["مدفوعات اليوم"] = df.apply(calculate_daily_payment, axis=1)
         
-        edited_df = st.data_editor(
-            editable_df,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "system": st.column_config.NumberColumn("المبلغ الحالي (System)", format="%.2f"),
-                "previous_system": st.column_config.NumberColumn("المبلغ السابق", disabled=True),
-                "Account No.": st.column_config.TextColumn("رقم الحساب", disabled=True),
-                "Spoc": st.column_config.TextColumn("الجهة", disabled=True),
-                "Type": st.column_config.TextColumn("النوع", disabled=True)
-            }
+        # حساب مستحق الدفع (الفاتورة - السيستم)[cite: 1]
+        df["مستحق الدفع"] = df["Invoice_April_2026"] - df["system"]
+
+        # 3. عرض الكروت (Metrics) كما في الصورة[cite: 1]
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.metric("إجمالي التحصيل اللحظي", f"{df['مدفوعات اليوم'].sum():,.2f} ج.م")
+        with c2:
+            st.metric("إجمالي المتبقي", f"{df['system'].sum():,.2f} ج.م")
+        with c3:
+            # عد العمليات التي حدث فيها دفع فعلي[cite: 1]
+            active_payments = len(df[df['مدفوعات اليوم'] > 0])
+            st.metric("عدد العمليات", active_payments)
+
+        st.markdown("---")
+        
+        # 4. التقرير النهائي (بالتنسيق والمسميات المطلوبة للجروب)[cite: 1]
+        st.subheader("📋 التقرير النهائي (تنسيق العرض)")
+        
+        report_display = df.copy()
+        # إعادة تسمية الأعمدة لتطابق التقرير المطلوب[cite: 1]
+        report_display = report_display.rename(columns={
+            "Account No.": "Account No.",
+            "Spoc": "Spoc",
+            "Mobile": "Phone Sub Account",
+            "Invoice_April_2026": "الفاتورة الصادرة ابريل ٢٠٢٦",
+            "system": "System",
+            "مستحق الدفع": "مستحق الدفع",
+            "مدفوعات اليوم": "مدفوعات اليوم"
+        })
+        
+        # اختيار الأعمدة بالترتيب الذي ظهر في صورتك[cite: 1]
+        final_cols = ["Account No.", "Spoc", "Phone Sub Account", "الفاتورة الصادرة ابريل ٢٠٢٦", "System", "مستحق الدفع", "مدفوعات اليوم"]
+        st.dataframe(report_display[final_cols].style.format(precision=2), use_container_width=True, hide_index=True)
+
+        # 5. حفظ وترحيل البيانات[cite: 1]
+        df["previous_system"] = df["system"] # السيستم الحالي يصبح سابقاً للمرة القادمة[cite: 1]
+        
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df.to_excel(writer, index=False)
+        
+        st.success("✅ تم تحديث البيانات بنجاح.")
+        st.download_button(
+            "📥 تحميل ملف قاعدة البيانات المحدث (database.xlsx)",
+            data=output.getvalue(),
+            file_name="database.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-
-        if st.button("🚀 تحديث وحساب التحصيلات"):
-            updated_df = df.copy()
-            
-            # تحديث القيم باستخدام الخريطة (Map) لتجنب KeyError
-            updates = edited_df.set_index("Account No.")["system"].to_dict()
-            updated_df["system"] = updated_df["Account No."].map(updates).fillna(updated_df["system"])
-
-            # الحسابات الأساسية[cite: 1]
-            # المدفوع = القديم - الجديد
-            updated_df["Paid_Since_Last_Update"] = updated_df.apply(
-                lambda row: 0 if row["Type"] == "NonPayment" else (row["previous_system"] - row["system"]), axis=1
-            )
-            
-            # المتبقي = الفاتورة - الجديد
-            updated_df["Remaining_Due"] = updated_df["Invoice_April_2026"] - updated_df["system"]
-            updated_df["Overpayment"] = updated_df["Paid_Since_Last_Update"].apply(lambda x: abs(x) if x < 0 else 0)
-
-            # عرض الملخص (Metrics)[cite: 1]
-            c1, c2, c3 = st.columns(3)
-            with c1: st.metric("إجمالي التحصيل اللحظي", f"{updated_df['Paid_Since_Last_Update'].sum():,.2f} ج.م")
-            with c2: st.metric("إجمالي المتبقي", f"{updated_df['Remaining_Due'].sum():,.2f} ج.م")
-            with c3: st.metric("عدد العمليات", len(updated_df[updated_df['Paid_Since_Last_Update'] > 0]))
-
-            st.markdown("---")
-            st.subheader("📋 تقرير التفاصيل النهائي")
-            st.dataframe(updated_df, use_container_width=True, hide_index=True)
-
-            # تحضير ملف التحميل[cite: 1]
-            # لجعل التحديث القادم صحيحاً، نجعل الـ system الحالي هو الـ previous_system للمرة القادمة
-            db_to_save = updated_df.copy()
-            db_to_save["previous_system"] = db_to_save["system"]
-            
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                db_to_save.to_excel(writer, index=False)
-            
-            st.success("✅ تم التحديث! حملي الملف وارفعيه لـ GitHub")
-            st.download_button(
-                label="📥 تحميل ملف database.xlsx المحدث",
-                data=output.getvalue(),
-                file_name="database.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-    else:
-        st.error("لم يتم تحميل أي بيانات. تأكدي من رفع ملف database.xlsx")
+else:
+    st.error("تأكدي من رفع ملف database.xlsx في المسار الصحيح.")
