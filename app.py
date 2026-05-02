@@ -14,9 +14,6 @@ if not os.path.exists(DB):
     pd.DataFrame(columns=["Account","Spoc","Mobile","Previous","Invoice_April_2026","Type"])\
         .to_excel(DB, sheet_name="master", index=False)
 
-# ================= تحميل البيانات =================
-master = pd.read_excel(DB, sheet_name="master")
-
 st.title("📊 Telecom Payment System")
 
 # ================= Upload =================
@@ -30,14 +27,19 @@ if file:
     if "Type" not in df_upload.columns:
         df_upload["Type"] = "Normal"
 
-    # تنظيف القيم
     df_upload = df_upload.fillna(0)
-
-    # تحويل No Show إلى 0
     df_upload = df_upload.replace("No Show", 0)
 
     df_upload.to_excel(DB, sheet_name="master", index=False)
     st.success("تم حفظ البيانات بنجاح")
+
+    st.rerun()  # 🔥 حل المشكلة
+
+# ================= تحميل البيانات بعد الرفع =================
+if os.path.exists(DB):
+    master = pd.read_excel(DB, sheet_name="master")
+else:
+    master = pd.DataFrame()
 
 # ================= إدخال القيم =================
 st.subheader("✍️ تحديث القيم الحالية")
@@ -125,7 +127,6 @@ if not master.empty:
             "Type"
         ]
 
-        # ترتيب
         payment_report = payment_report.sort_values(
             by="مبلغ مستحق",
             ascending=False
@@ -140,7 +141,6 @@ if not master.empty:
         # ================= Excel =================
         excel_df = payment_report.copy()
 
-        # إضافة صف الإجمالي
         total_row = pd.DataFrame([{
             "مبلغ مستحق": total,
             "Phone Sub Account": "",
